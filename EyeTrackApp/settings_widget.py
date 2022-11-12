@@ -26,6 +26,7 @@ class SettingsWidget:
         self.gui_speed_coefficient = f"-SPEEDCOEFFICIENT{widget_id}-"
         self.gui_min_cutoff = f"-MINCUTOFF{widget_id}-"
         self.gui_eye_falloff = f"-EYEFALLOFF{widget_id}-"
+        self.gui_blink_sync = f"-BLINKSYNC{widget_id}-"
         self.main_config = main_config
         self.config = main_config.settings
         self.osc_queue = osc_queue
@@ -59,6 +60,13 @@ class SettingsWidget:
                     "Dual Eye Falloff",
                     default=self.config.gui_eye_falloff,
                     key=self.gui_eye_falloff,
+                    background_color='#424042',
+                ),
+            ],
+            [sg.Checkbox(
+                    "Sync Blinks (disables winking)",
+                    default=self.config.gui_blink_sync,
+                    key=self.gui_blink_sync,
                     background_color='#424042',
                 ),
             ],
@@ -173,12 +181,26 @@ class SettingsWidget:
         changed = False
 
         if self.config.gui_osc_port != values[self.gui_osc_port]:
-            self.config.gui_osc_port = values[self.gui_osc_port]
-            changed = True
+            try: 
+                int(values[self.gui_osc_port])
+                if len(values[self.gui_osc_port]) <= 5:
+                    self.config.gui_osc_port = int(values[self.gui_osc_port])
+                    changed = True
+                else:
+                    print("[ERROR] OSC port value must be an integer 0-65535")
+            except:
+                print("[ERROR] OSC port value must be an integer 0-65535")
 
         if self.config.gui_osc_receiver_port != values[self.gui_osc_receiver_port]:
-            self.config.gui_osc_receiver_port = values[self.gui_osc_receiver_port]
-            changed = True
+            try: 
+                int(values[self.gui_osc_receiver_port])
+                if len(values[self.gui_osc_receiver_port]) <= 5:
+                    self.config.gui_osc_receiver_port = int(values[self.gui_osc_receiver_port])
+                    changed = True
+                else:
+                    print("[ERROR] OSC receive port value must be an integer 0-65535")
+            except:
+                print("[ERROR] OSC receive port value must be an integer 0-65535")
 
         if self.config.gui_osc_address != values[self.gui_osc_address]:
             self.config.gui_osc_address = values[self.gui_osc_address]
@@ -221,7 +243,10 @@ class SettingsWidget:
             self.config.gui_eye_falloff = values[self.gui_eye_falloff]
             changed = True
 
-        
+        if self.config.gui_blink_sync != values[self.gui_blink_sync]:
+            self.config.gui_blink_sync = values[self.gui_blink_sync]
+            changed = True
+
         if self.config.gui_blob_maxsize != values[self.gui_blob_maxsize]:
             self.config.gui_blob_maxsize = values[self.gui_blob_maxsize]
             changed = True

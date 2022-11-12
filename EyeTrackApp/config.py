@@ -7,8 +7,8 @@ CONFIG_FILE_NAME: str = "eyetrack_settings.json"
 
 
 class EyeTrackCameraConfig(BaseModel):
-    threshold: int = 0
-    rotation_angle: int = 50
+    threshold: int = 50
+    rotation_angle: int = 0
     roi_window_x: int = 0
     roi_window_y: int = 0
     roi_window_w: int = 0
@@ -26,15 +26,16 @@ class EyeTrackSettingsConfig(BaseModel):
     gui_min_cutoff: str = "0.0004"
     gui_speed_coefficient: str = "0.9"
     gui_osc_address: str = "127.0.0.1"
-    gui_osc_port: str = "9000"
-    gui_osc_receiver_port: str = "9001"
+    gui_osc_port: int = 9000
+    gui_osc_receiver_port: int = 9001
     gui_osc_recenter_address: str = "/avatar/parameters/etvr_recenter"
     gui_osc_recalibrate_address: str = "/avatar/parameters/etvr_recalibrate"
     gui_blob_maxsize: float = 25
     gui_blob_minsize: float = 10
     gui_recenter_eyes: bool = False
     gui_eye_falloff: bool = False
-    tracker_single_eye: float = 0
+    tracker_single_eye: int = 0
+    gui_blink_sync: bool = False
 
 
 class EyeTrackConfig(BaseModel):
