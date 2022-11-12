@@ -39,6 +39,7 @@ class Camera:
         self.serial_connection = None
         self.frame_number = 0
         self.start = True
+        self.serialByteBuffer = b''
         self.error_message = "Capture source {} not found, retrying"
 
     def set_output_queue(self, camera_output_outgoing: "queue.Queue"):
@@ -114,75 +115,49 @@ class Camera:
 
     def get_serial_camera_picture(self, should_push):
         start = time.time()
-        #print("get serial camera")
-        # try:
-        bytes = b''
-        if self.serial_connection.in_waiting:
-            #print("Serial")
-            bytes += self.serial_connection.read(4096)  # Read in initial bytes
+        try:
+            bytes = self.serialByteBuffer
+            if self.serial_connection.in_waiting:
+                bytes += self.serial_connection.read(4096)  # Read in initial bytes
 
-            a = bytes.find(b'\xff\xd8') # Find start byte for jpeg image
-            b = bytes.find(b'\xff\xd9') # Fine end byte for jpeg image
+                a = bytes.find(b'\xff\xd8') # Find start byte for jpeg image
+                b = bytes.find(b'\xff\xd9') # Fine end byte for jpeg image
 
-            # If the first found end byte is before the start byte, keep reading in serial
-            # data and discarding the old data until the start byte is before the end byte
-            # - I believe this may be a poor implentation and discards useful data but it
-            # requires more testing to verify this.
-            while a > b:
-                #print("less")
-                bytes = bytes[a:]
-                a = bytes.find(b'\xff\xd8')
-                b = bytes.find(b'\xff\xd9')
-                if a == -1 or b == -1:
-                    bytes += self.serial_connection.read(2048)
-                #print(a)
-                #print(b)
+                # If the first found end byte is before the start byte, keep reading in serial
+                # data and discarding the old data until the start byte is before the end byte
+                # - I believe this may be a poor implentation and discards useful data but it
+                # requires more testing to verify this.
+                while a > b:
+                    bytes = bytes[a:]
+                    a = bytes.find(b'\xff\xd8')
+                    b = bytes.find(b'\xff\xd9')
+                    if a == -1 or b == -1:
+                        bytes += self.serial_connection.read(2048)
+                
+                if a != -1 and b != -1: # If there is jpeg data
+                    jpg = bytes[a:b+2]  # Create the string of bytes for the current jpeg
+                    bytes = bytes[b+2:] # Clear the buffer until the end of our current jpeg
+                    self.serialByteBuffer = bytes
+            
+                    if jpg:
+                        # Create jpeg frame from byte string
+                        image = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+                        if image is None:
+                            print("image not found")
+                        else:
+                            self.frame_number = self.frame_number + 1
+                        fps = 1/(time.time() - start)   # Calculate FPS - This could use a better implementation
+                        if should_push:
+                            self.push_image_to_queue(image, self.frame_number, fps)
 
-            #print(a)
-            #print(b)
-            if a != -1 and b != -1: # If there is jpeg data
-                #size = len(bytes)
-                jpg = bytes[a:b+2]  # Create the string of bytes for the current jpeg
-                bytes = bytes[b+2:] # Clear the buffer until the end of our current jpeg
-                #print(len(jpg))
-        
-                if jpg:
-                    # Create jpeg frame from byte string
-                    image = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
-                    if image is None:
-                        print("image not found")
-                    else:
-                        self.frame_number = self.frame_number + 1
-                    fps = 1/(time.time() - start)   # Calculate FPS - This could use a better implementation
-                    if should_push:
-                        self.push_image_to_queue(image, self.frame_number, fps)
-
-        # except UnboundLocalError as ex:
-        #     print(ex)
-        # except Exception as ex:
-        #     print(ex.__class__)
-        #     print(
-        #     "Serial capture source problem, assuming camera disconnected, waiting for reconnect.")
-        #     self.camera_status = CameraState.DISCONNECTED
-        #     pass
-
-    # def start_serial_connection(self, port):
-    #     serialInst = serial.Serial()
-    #     print("setting baudrate")
-    #     serialInst.baudrate = 2000000
-    #     print("baudrate set")
-
-    #     serialInst.port = port
-    #     serialInst.setDTR(False)
-    #     serialInst.setRTS(False)
-
-    #     if not serialInst.isOpen():
-    #         print("COM Port already open, there may be another application interfering with the connection")
-    #         return False
-        
-    #     serialInst.open()
-    #     print("port open")
-    #     return serialInst
+        except UnboundLocalError as ex:
+            print(ex)
+        except Exception as ex:
+            print(ex.__class__)
+            print(
+            "Serial capture source problem, assuming camera disconnected, waiting for reconnect.")
+            self.camera_status = CameraState.DISCONNECTED
+            pass
 
     def push_image_to_queue(self, image, frame_number, fps):
         # If there's backpressure, just yell. We really shouldn't have this unless we start getting
