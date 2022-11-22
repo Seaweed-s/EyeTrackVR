@@ -56,15 +56,16 @@ class Camera:
             if (
                 self.config.capture_source != None and self.config.capture_source != ""
             ):
-                if (self.start == True):
+                if (self.current_capture_source[:3] == "COM"):
                     if (
                         self.serial_connection is None
-                        and self.current_capture_source == "COM9"
+                        or self.camera_status == CameraState.DISCONNECTED
+                        or self.config.capture_source != self.current_capture_source
                     ):
                         port = self.current_capture_source
-                        
-                        self.serial_connection = start_serial_connection(port)
-                    elif (
+                        self.start_serial_connection(port)
+                else:
+                    if (
                         self.wired_camera is None
                         or not self.wired_camera.isOpened()
                         or self.camera_status == CameraState.DISCONNECTED
@@ -78,7 +79,6 @@ class Camera:
                         self.current_capture_source = self.config.capture_source
                         self.wired_camera = cv2.VideoCapture(self.current_capture_source)
                         should_push = False
-                    self.start = False
             else:
                 # We don't have a capture source to try yet, wait for one to show up in the GUI.
                 if self.cancellation_event.wait(WAIT_TIME):
@@ -90,8 +90,10 @@ class Camera:
             if should_push and not self.capture_event.wait(timeout=0.02):
                 continue
             
-            self.get_serial_camera_picture(should_push)
-            #self.get_wired_camera_picture(should_push)
+            if (self.current_capture_source[:3] == "COM"):
+                self.get_serial_camera_picture(should_push)
+            else:
+                self.get_wired_camera_picture(should_push)
             if not should_push:
                 # if we get all the way down here, consider ourselves connected
                 self.camera_status = CameraState.CONNECTED
@@ -125,8 +127,6 @@ class Camera:
 
                 # If the first found end byte is before the start byte, keep reading in serial
                 # data and discarding the old data until the start byte is before the end byte
-                # - I believe this may be a poor implentation and discards useful data but it
-                # requires more testing to verify this.
                 while a > b:
                     bytes = bytes[a:]
                     a = bytes.find(b'\xff\xd8')
@@ -149,7 +149,7 @@ class Camera:
                         fps = 1/(time.time() - start)   # Calculate FPS - This could use a better implementation
                         if should_push:
                             self.push_image_to_queue(image, self.frame_number, fps)
-
+        
         except UnboundLocalError as ex:
             print(ex)
         except Exception as ex:
@@ -158,6 +158,24 @@ class Camera:
             "Serial capture source problem, assuming camera disconnected, waiting for reconnect.")
             self.camera_status = CameraState.DISCONNECTED
             pass
+
+    def start_serial_connection(self, port):
+        try:
+            serialInst = serial.Serial()
+            print("setting baudrate")
+            serialInst.baudrate = 2000000
+            print("baudrate set")
+
+            serialInst.port = port
+            serialInst.setDTR(False)
+            serialInst.setRTS(False)
+
+            serialInst.open()
+            print("port open")
+            self.serial_connection = serialInst
+            self.camera_status = CameraState.CONNECTED
+        except:
+            print("Error Opening Serial Port")
 
     def push_image_to_queue(self, image, frame_number, fps):
         # If there's backpressure, just yell. We really shouldn't have this unless we start getting
@@ -169,21 +187,3 @@ class Camera:
             )
         self.camera_output_outgoing.put((image, frame_number, fps))
         self.capture_event.clear()
-
-def start_serial_connection(port):
-    serialInst = serial.Serial()
-    print("setting baudrate")
-    serialInst.baudrate = 2000000
-    print("baudrate set")
-
-    serialInst.port = port
-    serialInst.setDTR(False)
-    serialInst.setRTS(False)
-
-    if not serialInst.isOpen():
-        print("COM Port already open, there may be another application interfering with the connection")
-        
-        
-    serialInst.open()
-    print("port open")
-    return serialInst
