@@ -6,6 +6,15 @@ from settings_widget import SettingsWidget
 import queue
 import threading
 import PySimpleGUI as sg
+import sys
+from urllib.request import urlopen
+from bs4 import BeautifulSoup
+
+import webbrowser
+
+if sys.platform.startswith("win"):
+    from win10toast_click import ToastNotifier
+
 # Random environment variable to speed up webcam opening on the MSMF backend.
 # https://github.com/opencv/opencv/issues/17687
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
@@ -21,6 +30,16 @@ BOTH_EYE_RADIO_NAME = "-BOTHEYERADIO-"
 SETTINGS_RADIO_NAME = '-SETTINGSRADIO-'
 
 
+page_url = 'https://github.com/RedHawk989/EyeTrackVR/releases/latest'
+
+def open_url():
+    try: 
+        webbrowser.open_new(page_url)
+        print('Opening URL...')  
+    except: 
+        print('Failed to open URL. Unsupported variable type.')
+
+
 def main():
     # Get Configuration
     config: EyeTrackConfig = EyeTrackConfig.load()
@@ -30,6 +49,37 @@ def main():
 
     # Check to see if we can connect to our video source first. If not, bring up camera finding
     # dialog.
+
+    appversion = "0.1.7.2"
+    url = "https://raw.githubusercontent.com/RedHawk989/EyeTrackVR-Installer/master/Version-Data/Version_Num.txt"
+    html = urlopen(url).read()
+    soup = BeautifulSoup(html, features="html.parser")
+    for script in soup(["script", "style"]):
+        script.extract() 
+    text = soup.get_text()
+
+    # break into lines and remove leading and trailing space on each
+    lines = (line.strip() for line in text.splitlines())
+    # break multi-headlines into a line each
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    # drop blank lines
+    latestversion = '\n'.join(chunk for chunk in chunks if chunk)
+
+    if appversion == latestversion: # If what we scraped and hardcoded versions are same, assume we are up to date.
+        print(f"[INFO] App is up to date! {latestversion}")
+    else: 
+        print(f"[INFO] You have app version {appversion} installed. Please update to {latestversion} for the newest fixes.")
+        if sys.platform.startswith("win"):
+            toaster = ToastNotifier()
+            toaster.show_toast(  #show windows toast
+                "EyeTrackVR has an update.",
+                "Click to go to the latest version.",
+                icon_path= "Images/logo.ico",
+                duration=5,
+                threaded=True,
+                callback_on_click=open_url
+                )
+            
 
     # Check to see if we have an ROI. If not, bring up ROI finder GUI.
 
@@ -119,7 +169,7 @@ def main():
     osc_receiver_thread.start()
 
     # Create the window
-    window = sg.Window("EyeTrackVR v0.1.7.2", layout, icon='Images/logo.ico', background_color='#292929')
+    window = sg.Window(f"EyeTrackVR {appversion}" , layout, icon='Images/logo.ico', background_color='#292929')
 
     # GUI Render loop
     while True:
